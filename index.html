@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Google Play Store Analytics</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/moment-timezone@0.5.33/builds/moment-timezone-with-data.min.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #4285F4;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .filters {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+        .filter-item {
+            display: flex;
+            flex-direction: column;
+        }
+        label {
+            font-weight: 600;
+            margin-bottom: 5px;
+            font-size: 14px;
+        }
+        select, input {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .chart-container {
+            position: relative;
+            height: 500px;
+            margin-bottom: 40px;
+        }
+        .time-message {
+            text-align: center;
+            padding: 50px;
+            font-size: 18px;
+            color: #666;
+            display: none;
+        }
+        .data-info {
+            background-color: #e8f0fe;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 20px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Google Play Store Analytics Dashboard</h1>
+        
+        <div class="filters">
+            <div class="filter-item">
+                <label for="category">Top Categories</label>
+                <select id="category">
+                    <option value="loading" disabled>Loading categories...</option>
+                </select>
+            </div>
+            <div class="filter-item">
+                <label>Min Installs</label>
+                <input type="number" id="minInstalls" value="10000" min="10000">
+            </div>
+            <div class="filter-item">
+                <label>Min Revenue ($)</label>
+                <input type="number" id="minRevenue" value="10000" min="10000">
+            </div>
+            <div class="filter-item">
+                <label>Min Android Version</label>
+                <input type="number" id="minAndroid" value="4.1" step="0.1" min="4.1">
+            </div>
+            <div class="filter-item">
+                <label>Min Size (MB)</label>
+                <input type="number" id="minSize" value="15" min="15">
+            </div>
+        </div>
+        
+        <div class="time-message" id="timeMessage">
+            This dashboard is only available between 1:00 PM and 2:00 PM IST.
+            <br>Current time in IST: <span id="currentTime"></span>
+        </div>
+        
+        <div class="chart-container" id="chartContainer">
+            <canvas id="dualAxisChart"></canvas>
+        </div>
+        
+        <div class="data-info">
+            <strong>Data Filters Applied:</strong>
+            <ul>
+                <li>Apps with ≥ 10,000 installs</li>
+                <li>Apps with ≥ $10,000 revenue</li>
+                <li>Android version > 4.0</li>
+                <li>App size > 15MB</li>
+                <li>Content rating: Everyone</li>
+                <li>App name ≤ 30 characters</li>
+                <li>Top 3 categories by install count</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        // Check current time in IST
+        function checkAccessTime() {
+            const now = moment().tz('Asia/Kolkata');
+            const currentHour = now.hour();
+            const currentMinute = now.minute();
+            
+            // Update current time display
+            document.getElementById('currentTime').textContent = now.format('h:mm A');
+            
+            // Check if between 1 PM and 2 PM IST
+            if (currentHour === 13 || (currentHour === 14 && currentMinute === 0)) {
+                return true;
+            }
+            return false;
+        }
+
+        // Get top categories from data
+        function getTopCategories(data) {
+            // Group by category and sum installs
+            const categoryInstalls = {};
+            
+            data.forEach(app => {
+                if (!categoryInstalls[app.category]) {
+                    categoryInstalls[app.category] = 0;
+                }
+                categoryInstalls[app.category] += app.installs;
+            });
+            
+            // Sort by install count and get top 3
+            return Object.entries(categoryInstalls)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 3)
+                .map(item => item[0]);
+        }
+
+        // Sample data (in a real app, this would come from an API)
+        function fetchData() {
+            // Simulating API call with timeout
+            return new Promise(resolve => {
+                setTimeout(() => {
+                    const mockData = [
+                        { category: 'Games', type: 'Free', installs: 4500000, revenue: 125000 },
+                        { category: 'Games', type: 'Paid', installs: 1200000, revenue: 450000 },
+                        { category: 'Social', type: 'Free', installs: 3200000, revenue: 98000 },
+                        { category: 'Social', type: 'Paid', installs: 850000, revenue: 320000 },
+                        { category: 'Communication', type: 'Free', installs: 2800000, revenue: 85000 },
+                        { category: 'Communication', type: 'Paid', installs: 750000, revenue: 280000 },
+                        { category: 'Education', type: 'Free', installs: 1500000, revenue: 45000 },
+                        { category: 'Education', type: 'Paid', installs: 500000, revenue: 150000 }
+                    ];
+                    
+                    // Filter data based on requirements
+                    const filteredData = mockData.filter(app => 
+                        app.installs >= 10000 && 
+                        app.revenue >= 10000
+                    );
+                    
+                    resolve(filteredData);
+                }, 1000); // Simulate network delay
+            });
+        }
+
+        // Populate categories dropdown
+        async function populateCategories() {
+            const categorySelect = document.getElementById('category');
+            
+            try {
+                // Show loading state
+                categorySelect.innerHTML = '<option value="loading" disabled>Loading categories...</option>';
+                
+                // Fetch data
+                const data = await fetchData();
+                
+                // Get top 3 categories
+                const topCategories = getTopCategories(data);
+                
+                // Populate dropdown
+                categorySelect.innerHTML = '';
+                topCategories.forEach(category => {
+                    const option = document.createElement('option');
+                    option.value = category;
+                    option.textContent = category;
+                    categorySelect.appendChild(option);
+                });
+                
+                // Add "All Categories" option
+                const allOption = document.createElement('option');
+                allOption.value = 'all';
+                allOption.textContent = 'All Categories';
+                categorySelect.appendChild(allOption);
+                
+                return data;
+            } catch (error) {
+                console.error('Error loading categories:', error);
+                categorySelect.innerHTML = '<option value="error" disabled>Error loading categories</option>';
+                return null;
+            }
+        }
+
+        // Create dual axis chart
+        function createChart(data, selectedCategory = 'all') {
+            const ctx = document.getElementById('dualAxisChart').getContext('2d');
+            
+            // Filter data by selected category if not "all"
+            const filteredData = selectedCategory === 'all' 
+                ? data 
+                : data.filter(app => app.category === selectedCategory);
+            
+            // Group data by type (Free/Paid)
+            const groupedData = {
+                free: { installs: [], revenue: [] },
+                paid: { installs: [], revenue: [] }
+            };
+            
+            const categories = selectedCategory === 'all' 
+                ? getTopCategories(filteredData) 
+                : [selectedCategory];
+            
+            categories.forEach(category => {
+                const categoryData = filteredData.filter(app => app.category === category);
+                
+                // Calculate averages for free apps
+                const freeApps = categoryData.filter(app => app.type === 'Free');
+                groupedData.free.installs.push(
+                    freeApps.reduce((sum, app) => sum + app.installs, 0) / (freeApps.length || 1)
+                );
+                groupedData.free.revenue.push(
+                    freeApps.reduce((sum, app) => sum + app.revenue, 0) / (freeApps.length || 1)
+                );
+                
+                // Calculate averages for paid apps
+                const paidApps = categoryData.filter(app => app.type === 'Paid');
+                groupedData.paid.installs.push(
+                    paidApps.reduce((sum, app) => sum + app.installs, 0) / (paidApps.length || 1)
+                );
+                groupedData.paid.revenue.push(
+                    paidApps.reduce((sum, app) => sum + app.revenue, 0) / (paidApps.length || 1)
+                );
+            });
+            
+            return new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: categories,
+                    datasets: [
+                        {
+                            label: 'Free Apps - Installs',
+                            data: groupedData.free.installs,
+                            backgroundColor: 'rgba(66, 133, 244, 0.7)',
+                            borderColor: 'rgba(66, 133, 244, 1)',
+                            borderWidth: 1,
+                            yAxisID: 'y'
+                        },
+                        {
+                            label: 'Paid Apps - Installs',
+                            data: groupedData.paid.installs,
+                            backgroundColor: 'rgba(234, 67, 53, 0.7)',
+                            borderColor: 'rgba(234, 67, 53, 1)',
+                            borderWidth: 1,
+                            yAxisID: 'y'
+                        },
+                        {
+                            label: 'Free Apps - Revenue ($)',
+                            data: groupedData.free.revenue,
+                            backgroundColor: 'rgba(66, 133, 244, 0)',
+                            borderColor: 'rgba(66, 133, 244, 1)',
+                            borderWidth: 2,
+                            type: 'line',
+                            yAxisID: 'y1'
+                        },
+                        {
+                            label: 'Paid Apps - Revenue ($)',
+                            data: groupedData.paid.revenue,
+                            backgroundColor: 'rgba(234, 67, 53, 0)',
+                            borderColor: 'rgba(234, 67, 53, 1)',
+                            borderWidth: 2,
+                            type: 'line',
+                            yAxisID: 'y1'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Average Installs and Revenue: Free vs Paid Apps' + 
+                                  (selectedCategory === 'all' ? ' (Top Categories)' : ` (${selectedCategory})`),
+                            font: {
+                                size: 16
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.dataset.label || '';
+                                    if (label.includes('Installs')) {
+                                        if (context.parsed.y !== null) {
+                                            label += ': ' + context.parsed.y.toLocaleString();
+                                        }
+                                    } else {
+                                        if (context.parsed.y !== null) {
+                                            label += ': $' + context.parsed.y.toLocaleString();
+                                        }
+                                    }
+                                    return label;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            type: 'linear',
+                            display: true,
+                            position: 'left',
+                            title: {
+                                display: true,
+                                text: 'Average Installs'
+                            },
+                            ticks: {
+                                callback: function(value) {
+                                    return value.toLocaleString();
+                                }
+                            }
+                        },
+                        y1: {
+                            type: 'linear',
+                            display: true,
+                            position: 'right',
+                            title: {
+                                display: true,
+                                text: 'Average Revenue ($)'
+                            },
+                            grid: {
+                                drawOnChartArea: false
+                            },
+                            ticks: {
+                                callback: function(value) {
+                                    return '$' + value.toLocaleString();
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Initialize dashboard
+        async function initDashboard() {
+            const isAccessTime = checkAccessTime();
+            const timeMessage = document.getElementById('timeMessage');
+            const chartContainer = document.getElementById('chartContainer');
+            
+            if (isAccessTime) {
+                timeMessage.style.display = 'none';
+                chartContainer.style.display = 'block';
+                
+                // Load data and populate categories
+                const data = await populateCategories();
+                
+                if (data) {
+                    // Create initial chart
+                    let chart = createChart(data);
+                    
+                    // Add event listener for category selection
+                    document.getElementById('category').addEventListener('change', function() {
+                        // Destroy previous chart
+                        if (chart) {
+                            chart.destroy();
+                        }
+                        // Create new chart with selected category
+                        chart = createChart(data, this.value);
+                    });
+                }
+            } else {
+                timeMessage.style.display = 'block';
+                chartContainer.style.display = 'none';
+            }
+            
+            // Update time every minute
+            setInterval(() => {
+                const newAccessTime = checkAccessTime();
+                if (newAccessTime !== isAccessTime) {
+                    window.location.reload();
+                } else {
+                    document.getElementById('currentTime').textContent = 
+                        moment().tz('Asia/Kolkata').format('h:mm A');
+                }
+            }, 60000);
+        }
+
+        // Initialize when DOM is loaded
+        document.addEventListener('DOMContentLoaded', initDashboard);
+    </script>
+</body>
+</html>
